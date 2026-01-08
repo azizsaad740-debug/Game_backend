@@ -4,14 +4,19 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/database');
 const listEndpoints = require('express-list-endpoints');
 const swaggerUi = require('swagger-ui-express');
-const swaggerFile = require('./swagger-output.json');
+let swaggerFile;
+try {
+  swaggerFile = require('./swagger-output.json');
+} catch (e) {
+  console.warn('⚠️  Swagger output file not found. API documentation will be disabled.');
+}
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const adminRoutes = require('./routes/admin.routes');
 
 // Load environment variables
 dotenv.config();
- 
+
 // Connect to database
 connectDB();
 
@@ -80,7 +85,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // CORS configuration function
 const corsOptions = {
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // allow requests with no origin (like Postman, mobile apps, server-to-server)
     if (!origin) {
       console.log('📥 Request with no origin (server-to-server or tool)');
@@ -89,7 +94,7 @@ const corsOptions = {
 
     // Normalize origin - remove trailing slash and ensure proper format
     const normalizedOrigin = origin.replace(/\/+$/, '');
-    
+
     // Log incoming origin for debugging (always log in production for CORS issues)
     console.log(`🌐 CORS check for origin: ${normalizedOrigin}`);
     console.log(`📋 Allowed origins: ${allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'NONE (allowing all)'}`);
@@ -114,13 +119,13 @@ const corsOptions = {
         console.warn(`⚠️  Allowing origin: ${normalizedOrigin}`);
         return callback(null, true);
       }
-      
+
       // Check exact match first
       if (normalizedAllowedOrigins.indexOf(normalizedOrigin) !== -1) {
         console.log(`✅ CORS allowed origin (exact match): ${normalizedOrigin}`);
         return callback(null, true);
       }
-      
+
       // Also check if origin matches any allowed origin (handles www vs non-www, http vs https)
       const originMatches = normalizedAllowedOrigins.some(allowed => {
         // Exact match
@@ -138,12 +143,12 @@ const corsOptions = {
         }
         return false;
       });
-      
+
       if (originMatches) {
         console.log(`✅ CORS allowed origin (domain match): ${normalizedOrigin}`);
         return callback(null, true);
       }
-      
+
       // Check if it's a Vercel URL (temporary fallback for common Vercel patterns)
       const isVercelUrl = normalizedOrigin.includes('.vercel.app') || normalizedOrigin.includes('vercel.app');
       if (isVercelUrl && normalizedAllowedOrigins.length > 0) {
@@ -153,7 +158,7 @@ const corsOptions = {
         console.log(`✅ CORS allowed (Vercel fallback): ${normalizedOrigin}`);
         return callback(null, true);
       }
-      
+
       // Origin not allowed
       console.warn(`🚫 CORS blocked origin: ${normalizedOrigin}`);
       console.warn(`📋 Allowed origins: ${normalizedAllowedOrigins.join(', ')}`);
@@ -247,7 +252,9 @@ app.get('/api/health', (req, res) => {
 // =====================
 // Swagger UI
 // =====================
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
+if (swaggerFile) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
+}
 
 // =====================
 // List all routes in console

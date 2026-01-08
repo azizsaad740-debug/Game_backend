@@ -9,5 +9,5 @@ Thumbs.db
 .idea/
 .cursor/
 uploads/
-swagger-output.json
+# swagger-output.json
 api-test-results.json
