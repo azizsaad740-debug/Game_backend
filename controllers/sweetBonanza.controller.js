@@ -227,22 +227,42 @@ exports.playGame = asyncHandler(async (req, res) => {
       gameType: 'sweet-bonanza'
     });
 
-    // Wait for decision or timeout (20 seconds for better UX)
+    // Wait for decision or timeout (30 seconds for better UX)
     const startTime = Date.now();
     let decision = null;
-    while (Date.now() - startTime < 20000) {
+    while (Date.now() - startTime < 30000) {
       const check = await GameControl.findById(gameControl._id);
       if (check && check.status === 'completed') {
         decision = check.result;
         break;
       }
       // Small delay between checks
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     if (!decision) {
-      // Timeout or no result - use default RNG but mark as timeout
-      await GameControl.findByIdAndUpdate(gameControl._id, { status: 'timeout' });
+      // --- ANTI-MAJORITY OUTCOME ENGINE ---
+      // If admin doesn't respond, we check global "sentiments" (other pending games)
+      // to decide the outcome based on minority-win logic.
+      const pendingGamesCount = await GameControl.countDocuments({
+        status: 'pending',
+        createdAt: { $gt: new Date(Date.now() - 60000) } // Active in last minute
+      });
+
+      // If there's a "majority" of active players (e.g. more than 1), 
+      // we force a loss to ensure house profitability (Anti-Majority).
+      // Otherwise, we use a weighted house edge.
+      if (pendingGamesCount >= 1) {
+        decision = 'loss';
+      } else {
+        // Fallback to high house edge (Minority-Win simulation)
+        decision = Math.random() < 0.7 ? 'loss' : 'win';
+      }
+
+      await GameControl.findByIdAndUpdate(gameControl._id, {
+        status: 'timeout',
+        result: decision
+      });
     }
 
     // Generate game result first to determine if win or loss
