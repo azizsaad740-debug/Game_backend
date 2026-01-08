@@ -9,7 +9,7 @@ const authMiddleware = require('../middleware/auth.middleware');
 const adminMiddleware = require('../middleware/admin.middleware');
 
 const {
-  
+
   getDepositPool,
   getDepositRequestById,
   approveDeposit,
@@ -88,15 +88,17 @@ const {
   completeRound,
 } = require('../controllers/admin/admin.gameRound.controller');
 
+const gameControlController = require('../controllers/admin/admin.gameControl.controller');
+
 // ==========================================
 // 2. PUBLIC ADMIN ROUTES (Bypass Auth)
 // ==========================================
 // Test route to verify connection
 router.get('/test-kyc', (req, res) => {
-    res.json({ 
-        success: true, 
-        data: [{ _id: "1", user: { username: "System_Test", email: "test@test.com" }, status: "verified" }] 
-    });
+  res.json({
+    success: true,
+    data: [{ _id: "1", user: { username: "System_Test", email: "test@test.com" }, status: "verified" }]
+  });
 });
 
 // KYC routes (Public for debugging)
@@ -104,7 +106,7 @@ router.get('/kyc', kycController.getAllKYC);
 router.put('/kyc/:userId', kycController.updateKYCStatus);
 
 router.get('/test', (req, res) => {
-    res.json({ success: true, message: "Route found!" });
+  res.json({ success: true, message: "Route found!" });
 });
 
 // ==========================================
@@ -192,5 +194,9 @@ router.get('/tournaments/:id/participants', getTournamentParticipants);
 
 // Logs
 router.get('/logs', getAdminLogs);
+
+// Game Control (Manual Results)
+router.get('/game-controls/pending', gameControlController.getPendingSpins);
+router.post('/game-controls/:id/decision', gameControlController.submitDecision);
 
 module.exports = router;

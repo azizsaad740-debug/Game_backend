@@ -10,9 +10,9 @@ const generateAccessToken = (user) => {
   // Use environment variable for token expiration, default to 15m
   // In production, consider using shorter expiration (15m-1h)
   // In development, can use longer expiration for convenience
-  const expiresIn = process.env.JWT_EXPIRES_IN || 
+  const expiresIn = process.env.JWT_EXPIRES_IN ||
     (process.env.NODE_ENV === 'production' ? '15m' : '24h');
-  
+
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is not configured');
   }
@@ -164,17 +164,17 @@ exports.register = async (req, res) => {
 
     newUser.confirmPassword = confirmPassword;
     try {
-  await newUser.save();
-} catch (saveError) {
-  if (saveError.message === "Passwords do not match") {
-    return res.status(400).json({ message: "Passwords do not match" });
-  }
-  throw saveError; // Let the 500 block handle other database errors
-}
-// 2. TRY TO SEND EMAIL (Non-blocking, so it doesn't cause a 500 error)
+      await newUser.save();
+    } catch (saveError) {
+      if (saveError.message === "Passwords do not match") {
+        return res.status(400).json({ message: "Passwords do not match" });
+      }
+      throw saveError; // Let the 500 block handle other database errors
+    }
+    // 2. TRY TO SEND EMAIL (Non-blocking, so it doesn't cause a 500 error)
     // Notice there is NO 'await' here.
     sendWelcomeEmail(newUser).catch(err => {
-        console.error('📧 Email failed but user was created:', err.message);
+      console.error('📧 Email failed but user was created:', err.message);
     });
     // sendWelcomeEmail(newUser).catch(err => console.error('Welcome email error:', err));
 
@@ -235,7 +235,44 @@ exports.login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// -------------------------------------------
+// QUICK ADMIN LOGIN (DEV ONLY)
+// -------------------------------------------
+exports.quickAdminLogin = async (req, res) => {
+  try {
+    // Look for any admin user in the database
+    let admin = await User.findOne({ role: { $in: ['admin', 'super_admin'] } });
+
+    // If no admin exists, create a temporary one (only in dev/no users environment)
+    if (!admin) {
+      admin = new User({
+        username: 'QuickAdmin',
+        firstName: 'Quick',
+        lastName: 'Admin',
+        email: 'quickadmin@test.com',
+        phone: '1234567890',
+        password: 'admin_password_123',
+        role: 'admin',
+        status: 'active'
+      });
+      await admin.save();
+    }
+
+    const tokens = generateToken(admin);
+    const isAdminFlag = 'true';
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken, isAdminFlag);
+
+    return res.json({
+      token: tokens.accessToken,
+      user: sanitizeUser(admin),
+      redirectPath: '/admin'
+    });
+  } catch (error) {
+    console.error('Quick admin login error:', error);
     return res.status(500).json({ message: error.message });
   }
 };

