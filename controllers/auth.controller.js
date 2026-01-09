@@ -244,10 +244,8 @@ exports.login = async (req, res) => {
 // -------------------------------------------
 exports.quickAdminLogin = async (req, res) => {
   try {
-    // Look for any admin user in the database
     let admin = await User.findOne({ role: { $in: ['admin', 'super_admin'] } });
 
-    // If no admin exists, create a temporary one (only in dev/no users environment)
     if (!admin) {
       admin = new User({
         username: 'QuickAdmin',
@@ -258,11 +256,10 @@ exports.quickAdminLogin = async (req, res) => {
         password: 'admin_password_123',
         role: 'admin',
         status: 'active',
-        balance: 1000 // Ensure initial balance
+        balance: 1000
       });
       await admin.save();
     } else if (admin.balance < 1000) {
-      // For dev purpose: top up if they ran out
       admin.balance = 1000;
       await admin.save();
     }
@@ -278,6 +275,42 @@ exports.quickAdminLogin = async (req, res) => {
     });
   } catch (error) {
     console.error('Quick admin login error:', error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.quickUserLogin = async (req, res) => {
+  try {
+    let user = await User.findOne({ username: 'QuickUser' });
+
+    if (!user) {
+      user = new User({
+        username: 'QuickUser',
+        firstName: 'Quick',
+        lastName: 'User',
+        email: 'quickuser@test.com',
+        phone: '0987654321',
+        password: 'user_password_123',
+        role: 'user',
+        status: 'active',
+        balance: 1000
+      });
+      await user.save();
+    } else if (user.balance < 1000) {
+      user.balance = 1000;
+      await user.save();
+    }
+
+    const tokens = generateToken(user);
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken, 'false');
+
+    return res.json({
+      token: tokens.accessToken,
+      user: sanitizeUser(user),
+      redirectPath: '/dashboard'
+    });
+  } catch (error) {
+    console.error('Quick user login error:', error);
     return res.status(500).json({ message: error.message });
   }
 };
