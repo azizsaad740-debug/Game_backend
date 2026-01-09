@@ -6,7 +6,12 @@ const {
   register,
   login,
   refreshToken,
-  getMe, forgotPassword, resetPassword, logout, quickAdminLogin, quickUserLogin
+  getMe,
+  forgotPassword,
+  resetPassword,
+  logout,
+  quickAdminLogin,
+  quickUserLogin
 } = require('../controllers/auth.controller');
 
 // ------------------------
@@ -17,7 +22,7 @@ router.post('/login', login);
 router.post('/quick-admin-login', quickAdminLogin);
 router.post('/quick-user-login', quickUserLogin);
 
-router.post('/logout', logout); // still public because it just clears cookies
+router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.post('/refresh-token', refreshToken);
