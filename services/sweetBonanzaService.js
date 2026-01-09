@@ -289,7 +289,7 @@ class SweetBonanzaService {
         const winBetsTotal = (this.session.bets || []).filter(b => b.side === 'win').reduce((sum, b) => sum + (Number(b.betAmount) || 0), 0);
         const lossBetsTotal = (this.session.bets || []).filter(b => b.side === 'loss').reduce((sum, b) => sum + (Number(b.betAmount) || 0), 0);
 
-        const uniqueBetters = new Set(this.session.bets.map(b => b.userId.toString()));
+        const uniqueBetters = new Set((this.session.bets || []).map(b => b.userId ? b.userId.toString() : 'guest'));
         const viewersCount = Math.max(0, this.activePlayers.size - uniqueBetters.size);
 
         return {
@@ -297,10 +297,11 @@ class SweetBonanzaService {
             timeLeft: Math.max(0, this.session.timeLeft),
             roundId: this.session.roundId,
             roundCycle: this.session.roundCycle || 1,
+            adminDecision: this.session.adminDecision,
             result: this.session.result,
-            betsCount: this.session.bets.length,
+            betsCount: (this.session.bets || []).length,
             viewersCount: viewersCount,
-            totalPlayers: Math.max(this.activePlayers.size, this.session.bets.length),
+            totalPlayers: Math.max(this.activePlayers.size, (this.session.bets || []).length),
             betsTotals: {
                 win: winBetsTotal,
                 loss: lossBetsTotal

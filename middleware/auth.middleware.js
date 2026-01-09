@@ -46,11 +46,11 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
   if (!user) {
     throw new AppError('User not found', 404);
   }
-  
+
   if (user.status === 'banned') {
     throw new AppError('Account banned', 403);
   }
-  
+
   if (user.status === 'self_excluded') {
     throw new AppError('Self exclusion active', 403);
   }
@@ -61,4 +61,31 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
   next();
 });
 
+const optionalAuth = asyncHandler(async (req, res, next) => {
+  try {
+    let token = null;
+    const authHeader = req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else {
+      token = req.cookies?.accessToken;
+    }
+
+    if (!token) {
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (user && user.status !== 'banned') {
+      req.user = user;
+    }
+  } catch (err) {
+    // Silently ignore auth errors for optional auth
+  }
+  next();
+});
+
+authMiddleware.optionalAuth = optionalAuth;
 module.exports = authMiddleware;

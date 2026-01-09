@@ -8,14 +8,15 @@ const sweetBonanzaController = require('../controllers/sweetBonanza.controller')
 const authMiddleware = require('../middleware/auth.middleware');
 
 // Public endpoints (no auth required)
+// Public/Optional auth endpoints
 router.get('/debug-session', sweetBonanzaController.getDebugSession);
-router.get('/session', sweetBonanzaController.getSession);
-router.post('/bet', sweetBonanzaController.placeLobbyBet);
+router.get('/session', authMiddleware.optionalAuth, sweetBonanzaController.getSession);
+router.post('/bet', authMiddleware.optionalAuth, sweetBonanzaController.placeLobbyBet);
 
-// All routes below require authentication
+// All routes below require FULL authentication
 router.use(authMiddleware);
 
-// Play game
+// Play game (non-lobby version)
 router.post('/play', sweetBonanzaController.playGame);
 
 // Lobby Session routes (admin only)
