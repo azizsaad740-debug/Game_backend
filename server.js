@@ -254,6 +254,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Self-ping to prevent Render from sleeping (runs every 14 mins)
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+const keepAlive = async () => {
+  try {
+    const axios = require('axios');
+    // Ping self
+    await axios.get(`${BACKEND_URL}/api/health`);
+    console.log('💓 Self-Ping: Stay awake!');
+  } catch (err) {
+    console.log('💓 Self-Ping failed, but service is likely alive.');
+  }
+};
+
+// Start self-ping only in production
+if (process.env.NODE_ENV === 'production') {
+  setInterval(keepAlive, 14 * 60 * 1000); // Every 14 minutes
+}
+
 // =====================
 // Swagger UI
 // =====================

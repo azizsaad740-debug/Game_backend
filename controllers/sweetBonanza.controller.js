@@ -604,26 +604,27 @@ exports.placeLobbyBet = asyncHandler(async (req, res) => {
   // If user is logged in, check balance
   if (userId) {
     const user = await User.findById(userId);
-    if (!user || user.balance < betAmount) {
+    const existingBet = sweetBonanzaService.getBetForUser(userId);
+    const alreadyBetAmount = existingBet ? existingBet.betAmount : 0;
+
+    // Total effective balance = current balance + amount already committed to this round
+    if (!user || (user.balance + alreadyBetAmount) < betAmount) {
       throw new AppError('Insufficient balance', 400);
     }
 
-    // Deduct balance immediately
-    user.balance -= betAmount;
-    await user.save();
+    const betResult = sweetBonanzaService.addBet(userId, betAmount, side);
 
-    const result = sweetBonanzaService.addBet(userId, betAmount, side);
-
-    if (!result.success) {
-      // Refund if betting is closed
-      user.balance += betAmount;
-      await user.save();
-      throw new AppError(result.message, 400);
+    if (!betResult.success) {
+      throw new AppError(betResult.message, 400);
     }
+
+    // Deduct/Adjust balance: NewBalance = CurrentBalance + OldBet - NewBet
+    user.balance = (user.balance + alreadyBetAmount) - betAmount;
+    await user.save();
 
     res.json({
       success: true,
-      message: 'Bet placed successfully',
+      message: betResult.refundAmount > 0 ? 'Bet updated successfully' : 'Bet placed successfully',
       newBalance: user.balance
     });
   } else {

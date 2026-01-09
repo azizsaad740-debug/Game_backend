@@ -256,7 +256,9 @@ class SweetBonanzaService {
 
                 if (userWon) {
                     const payout = betAmount * 2;
-                    await User.updateOne({ _id: bet.userId }, { $inc: { balance: payout } });
+                    user.balance += payout;
+                    user.totalWinnings = (user.totalWinnings || 0) + payout;
+                    await user.save();
 
                     await Transaction.create({
                         user: bet.userId,
@@ -264,7 +266,7 @@ class SweetBonanzaService {
                         amount: payout,
                         status: 'completed',
                         description: `Sweet Bonanza Lobby Win (${bet.side})`,
-                        metadata: { roundId: this.session.roundId, betAmount: betAmount, side: bet.side }
+                        metadata: { roundId: this.session.roundId, betAmount: betAmount, side: bet.side, newBalance: user.balance }
                     });
                 } else {
                     await Transaction.create({
@@ -273,7 +275,7 @@ class SweetBonanzaService {
                         amount: betAmount,
                         status: 'completed',
                         description: `Sweet Bonanza Lobby Loss (${bet.side})`,
-                        metadata: { roundId: this.session.roundId, betAmount: betAmount, side: bet.side }
+                        metadata: { roundId: this.session.roundId, betAmount: betAmount, side: bet.side, newBalance: user.balance }
                     });
                 }
             }
@@ -309,12 +311,29 @@ class SweetBonanzaService {
         };
     }
 
+    getBetForUser(userId) {
+        if (!userId) return null;
+        return (this.session.bets || []).find(b => b.userId.toString() === userId.toString());
+    }
+
     addBet(userId, betAmount, side) {
         if (this.session.phase !== 'BETTING') return { success: false, message: 'Betting is closed' };
         if (this.session.timeLeft < 1) return { success: false, message: 'Betting time expired' };
 
-        this.session.bets.push({ userId, betAmount: Number(betAmount), side });
-        return { success: true };
+        // Support re-choosing: find existing bet for this user
+        const existingBetIndex = this.session.bets.findIndex(b => b.userId.toString() === userId.toString());
+        let refundAmount = 0;
+
+        if (existingBetIndex !== -1) {
+            refundAmount = this.session.bets[existingBetIndex].betAmount;
+            this.session.bets[existingBetIndex] = { userId, betAmount: Number(betAmount), side };
+            console.log(`[SB LOBBY] User ${userId} updated bet: ₺${refundAmount} -> ₺${betAmount} (${side})`);
+        } else {
+            this.session.bets.push({ userId, betAmount: Number(betAmount), side });
+            console.log(`[SB LOBBY] User ${userId} placed new bet: ₺${betAmount} (${side})`);
+        }
+
+        return { success: true, refundAmount };
     }
 
     setAdminDecision(decision) {
