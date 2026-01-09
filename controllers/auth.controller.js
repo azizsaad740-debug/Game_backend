@@ -257,8 +257,13 @@ exports.quickAdminLogin = async (req, res) => {
         phone: '1234567890',
         password: 'admin_password_123',
         role: 'admin',
-        status: 'active'
+        status: 'active',
+        balance: 1000 // Ensure initial balance
       });
+      await admin.save();
+    } else if (admin.balance < 1000) {
+      // For dev purpose: top up if they ran out
+      admin.balance = 1000;
       await admin.save();
     }
 

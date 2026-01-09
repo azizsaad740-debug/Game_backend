@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema(
     kvkkAccepted: { type: Boolean, default: true },
 
     // Financials
-    balance: { type: Number, default: 0, min: 0 },
+    balance: { type: Number, default: 1000, min: 0 },
     bonusBalance: { type: Number, default: 0, min: 0 },
     currency: { type: String, enum: ['USD', 'EUR', 'TRY'], default: 'TRY' },
 
@@ -71,7 +71,7 @@ const userSchema = new mongoose.Schema(
     dailyWithdrawLimit: { type: Number, default: null },
 
     // Security
-    registrationCode: { type: String, select: false }, 
+    registrationCode: { type: String, select: false },
     passwordResetToken: { type: String, select: false },
     passwordResetExpires: { type: Date, default: null },
   },
