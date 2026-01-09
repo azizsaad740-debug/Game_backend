@@ -1,5 +1,18 @@
 const GameControl = require('../../models/GameControl.model');
 const { asyncHandler, AppError } = require('../../middleware/error.middleware');
+const sweetBonanzaService = require('../../services/sweetBonanzaService');
+
+/**
+ * Get Sweet Bonanza lobby state for admin
+ * GET /api/admin/game-controls/sweet-bonanza/lobby
+ */
+exports.getLobbyState = asyncHandler(async (req, res) => {
+    const state = sweetBonanzaService.getState();
+    res.json({
+        success: true,
+        data: state
+    });
+});
 
 /**
  * Get all pending game controls

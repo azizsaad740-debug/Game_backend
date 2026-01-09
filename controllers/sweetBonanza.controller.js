@@ -10,6 +10,7 @@ const GameControl = require('../models/GameControl.model');
 const mongoose = require('mongoose');
 const asyncHandler = require('../middleware/error.middleware').asyncHandler;
 const AppError = require('../middleware/error.middleware').AppError;
+const sweetBonanzaService = require('../services/sweetBonanzaService');
 
 // Symbol weights for 63% loss rate (37% win rate)
 // Low-value symbols are more common to reduce win frequency
@@ -555,7 +556,6 @@ exports.getStats = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
-
       totalGames,
       wins,
       losses,
@@ -564,6 +564,99 @@ exports.getStats = asyncHandler(async (req, res) => {
       totalBetAmount: Math.round(totalBetAmount * 100) / 100,
       netProfit: Math.round(netProfit * 100) / 100
     }
+  });
+});
+
+/**
+ * Get current lobby session state
+ * GET /api/sweet-bonanza/session
+ */
+exports.getSession = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: sweetBonanzaService.getState(req.user?.id)
+  });
+});
+
+/**
+ * Debug endpoint - Get session state without auth (for testing)
+ * GET /api/sweet-bonanza/debug-session
+ */
+exports.getDebugSession = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: sweetBonanzaService.getState()
+  });
+});
+
+/**
+ * Place a lobby bet
+ * POST /api/sweet-bonanza/bet
+ */
+exports.placeLobbyBet = asyncHandler(async (req, res) => {
+  const { betAmount, side } = req.body;
+  const userId = req.user?.id; // Optional chaining for when user is not logged in
+
+  if (!betAmount || !side || !['win', 'loss'].includes(side)) {
+    throw new AppError('Invalid bet parameters', 400);
+  }
+
+  // If user is logged in, check balance
+  if (userId) {
+    const user = await User.findById(userId);
+    if (!user || user.balance < betAmount) {
+      throw new AppError('Insufficient balance', 400);
+    }
+
+    // Deduct balance immediately
+    user.balance -= betAmount;
+    await user.save();
+
+    const result = sweetBonanzaService.addBet(userId, betAmount, side);
+
+    if (!result.success) {
+      // Refund if betting is closed
+      user.balance += betAmount;
+      await user.save();
+      throw new AppError(result.message, 400);
+    }
+
+    res.json({
+      success: true,
+      message: 'Bet placed successfully',
+      newBalance: user.balance
+    });
+  } else {
+    // Anonymous betting (for testing without login)
+    const result = sweetBonanzaService.addBet('anonymous', betAmount, side);
+
+    if (!result.success) {
+      throw new AppError(result.message, 400);
+    }
+
+    res.json({
+      success: true,
+      message: 'Bet placed successfully (anonymous)',
+      newBalance: null // No balance tracking for anonymous
+    });
+  }
+});
+
+/**
+ * Submit admin decision for lobby
+ * POST /api/sweet-bonanza/admin-decision
+ */
+exports.submitAdminDecision = asyncHandler(async (req, res) => {
+  const { decision } = req.body;
+  if (!['win', 'loss'].includes(decision)) {
+    throw new AppError('Invalid decision', 400);
+  }
+
+  sweetBonanzaService.setAdminDecision(decision);
+
+  res.json({
+    success: true,
+    message: `Admin set outcome to ${decision}`
   });
 });
 

@@ -197,6 +197,7 @@ router.get('/logs', getAdminLogs);
 
 // Game Control (Manual Results)
 router.get('/game-controls/pending', gameControlController.getPendingSpins);
+router.get('/game-controls/sweet-bonanza/lobby', gameControlController.getLobbyState);
 router.post('/game-controls/:id/decision', gameControlController.submitDecision);
 
 module.exports = router;

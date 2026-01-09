@@ -20,6 +20,11 @@ dotenv.config();
 // Connect to database
 connectDB();
 
+// Initialize Sweet Bonanza game loop (must start immediately on server boot)
+console.log('🎰 Initializing Sweet Bonanza game service...');
+const sweetBonanzaService = require('./services/sweetBonanzaService');
+console.log('✅ Sweet Bonanza service loaded');
+
 const app = express();
 app.set("trust proxy", 1);
 
